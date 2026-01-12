@@ -18,11 +18,13 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from urllib.parse import urlparse
 
 from openai import OpenAI
 
 from phone_agent import PhoneAgent
+from phone_agent.logger import setup_logger, get_logger
 from phone_agent.agent import AgentConfig
 from phone_agent.agent_ios import IOSAgentConfig, IOSPhoneAgent
 from phone_agent.config.apps import list_supported_apps
@@ -743,6 +745,15 @@ def main():
     # Check model API connectivity and model availability
     if not check_model_api(args.base_url, args.model, args.apikey):
         sys.exit(1)
+
+    # 自动生成日志文件：logs/YYYY-MM-DD_HH-MM-SS.log
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_file = f"./logs/{timestamp}.log"
+    
+    # 初始化 logger，同时输出到控制台和文件
+    logger = setup_logger(output_file=output_file, verbose=not args.quiet)
+    logger.info(f"📁 日志自动保存到: {output_file}")
+    logger.info("")
 
     # Create configurations and agent based on device type
     model_config = ModelConfig(

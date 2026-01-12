@@ -8,6 +8,7 @@ from typing import Any, Callable
 from phone_agent.actions.handler import do, finish, parse_action
 from phone_agent.actions.handler_ios import IOSActionHandler
 from phone_agent.config import get_messages, get_system_prompt
+from phone_agent.logger import get_logger, save_screenshot
 from phone_agent.model import ModelClient, ModelConfig
 from phone_agent.model.client import MessageBuilder
 from phone_agent.xctest import XCTestConnection, get_current_app, get_screenshot
@@ -85,9 +86,9 @@ class IOSPhoneAgent:
             if success and session_id != "session_started":
                 self.agent_config.session_id = session_id
                 if self.agent_config.verbose:
-                    print(f"✅ Created WDA session: {session_id}")
+                    get_logger().info(f"✅ Created WDA session: {session_id}")
             elif self.agent_config.verbose:
-                print(f"⚠️  Using default WDA session (no explicit session ID)")
+                get_logger().info(f"⚠️  Using default WDA session (no explicit session ID)")
 
         self.action_handler = IOSActionHandler(
             wda_url=self.agent_config.wda_url,
@@ -156,6 +157,7 @@ class IOSPhoneAgent:
     ) -> StepResult:
         """Execute a single step of the agent loop."""
         self._step_count += 1
+        logger = get_logger()
 
         # Capture current screen state
         screenshot = get_screenshot(
@@ -166,6 +168,11 @@ class IOSPhoneAgent:
         current_app = get_current_app(
             wda_url=self.agent_config.wda_url, session_id=self.agent_config.session_id
         )
+
+        # 保存截图到日志目录
+        screenshot_path = save_screenshot(screenshot.base64_data, self._step_count)
+        if screenshot_path:
+            logger.info(f"📸 截图已保存: {screenshot_path}")
 
         # Build messages
         if is_first:
@@ -216,14 +223,14 @@ class IOSPhoneAgent:
         if self.agent_config.verbose:
             # Print thinking process
             msgs = get_messages(self.agent_config.lang)
-            print("\n" + "=" * 50)
-            print(f"💭 {msgs['thinking']}:")
-            print("-" * 50)
-            print(response.thinking)
-            print("-" * 50)
-            print(f"🎯 {msgs['action']}:")
-            print(json.dumps(action, ensure_ascii=False, indent=2))
-            print("=" * 50 + "\n")
+            logger.info("\n" + "=" * 50)
+            logger.info(f"💭 {msgs['thinking']}:")
+            logger.info("-" * 50)
+            logger.info(response.thinking)
+            logger.info("-" * 50)
+            logger.info(f"🎯 {msgs['action']}:")
+            logger.info(json.dumps(action, ensure_ascii=False, indent=2))
+            logger.info("=" * 50 + "\n")
 
         # Remove image from context to save space
         self._context[-1] = MessageBuilder.remove_images_from_message(self._context[-1])
@@ -252,11 +259,11 @@ class IOSPhoneAgent:
 
         if finished and self.agent_config.verbose:
             msgs = get_messages(self.agent_config.lang)
-            print("\n" + "🎉 " + "=" * 48)
-            print(
+            logger.info("\n" + "🎉 " + "=" * 48)
+            logger.info(
                 f"✅ {msgs['task_completed']}: {result.message or action.get('message', msgs['done'])}"
             )
-            print("=" * 50 + "\n")
+            logger.info("=" * 50 + "\n")
 
         return StepResult(
             success=result.success,

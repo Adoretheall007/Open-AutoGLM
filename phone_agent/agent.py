@@ -9,6 +9,7 @@ from phone_agent.actions import ActionHandler
 from phone_agent.actions.handler import do, finish, parse_action
 from phone_agent.config import get_messages, get_system_prompt
 from phone_agent.device_factory import get_device_factory
+from phone_agent.logger import get_logger, save_screenshot
 from phone_agent.model import ModelClient, ModelConfig
 from phone_agent.model.client import MessageBuilder
 
@@ -138,11 +139,17 @@ class PhoneAgent:
     ) -> StepResult:
         """Execute a single step of the agent loop."""
         self._step_count += 1
+        logger = get_logger()
 
         # Capture current screen state
         device_factory = get_device_factory()
         screenshot = device_factory.get_screenshot(self.agent_config.device_id)
         current_app = device_factory.get_current_app(self.agent_config.device_id)
+
+        # 保存截图到日志目录
+        screenshot_path = save_screenshot(screenshot.base64_data, self._step_count)
+        if screenshot_path:
+            logger.info(f"📸 截图已保存: {screenshot_path}")
 
         # Build messages
         if is_first:
@@ -171,9 +178,9 @@ class PhoneAgent:
         # Get model response
         try:
             msgs = get_messages(self.agent_config.lang)
-            print("\n" + "=" * 50)
-            print(f"💭 {msgs['thinking']}:")
-            print("-" * 50)
+            logger.info("\n" + "=" * 50)
+            logger.info(f"💭 {msgs['thinking']}:")
+            logger.info("-" * 50)
             response = self.model_client.request(self._context)
         except Exception as e:
             if self.agent_config.verbose:
@@ -196,10 +203,10 @@ class PhoneAgent:
 
         if self.agent_config.verbose:
             # Print thinking process
-            print("-" * 50)
-            print(f"🎯 {msgs['action']}:")
-            print(json.dumps(action, ensure_ascii=False, indent=2))
-            print("=" * 50 + "\n")
+            logger.info("-" * 50)
+            logger.info(f"🎯 {msgs['action']}:")
+            logger.info(json.dumps(action, ensure_ascii=False, indent=2))
+            logger.info("=" * 50 + "\n")
 
         # Remove image from context to save space
         self._context[-1] = MessageBuilder.remove_images_from_message(self._context[-1])
@@ -228,11 +235,11 @@ class PhoneAgent:
 
         if finished and self.agent_config.verbose:
             msgs = get_messages(self.agent_config.lang)
-            print("\n" + "🎉 " + "=" * 48)
-            print(
+            logger.info("\n" + "🎉 " + "=" * 48)
+            logger.info(
                 f"✅ {msgs['task_completed']}: {result.message or action.get('message', msgs['done'])}"
             )
-            print("=" * 50 + "\n")
+            logger.info("=" * 50 + "\n")
 
         return StepResult(
             success=result.success,
